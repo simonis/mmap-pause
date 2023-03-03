@@ -17,16 +17,22 @@ http://hg.openjdk.java.net/jdk9/client/hotspot/file/c3b117fa5bde/src/os/linux/vm
 */
 
 public class MakeGarbage {
-  public static void main(String[] arguments) {
+  public static void main(String[] args) throws Exception {
     final int ARRAY_SIZE = 4 << 20;
-    final int LOOPS = 2000000000;
+    final int LOOPS = 200_000;
     int sum = 0;
+    long start = System.currentTimeMillis();
     while (true) {
       for (int i = 0; i < LOOPS; i++) {
         byte[] array = new byte[ARRAY_SIZE];
         sum += array[0] + array.length;
       }
       System.out.println("hello " + sum);
+      if (args.length > 0) {
+        if (Integer.parseInt(args[0]) * 60_000L < (System.currentTimeMillis() - start)) {
+          break;
+        }
+      }
     }
   }
 }
