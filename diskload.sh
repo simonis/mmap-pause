@@ -5,8 +5,8 @@
 set -e
 #set -x
 
-PARALLEL_DD=2
-MAX_PARALLEL_DD=8
+PARALLEL_DD=${PARALLEL_DD:-"2"}
+MAX_PARALLEL_DD=${MAX_PARALLEL_DD:-"8"}
 
 
 # Generate random bytes in case some weird disk system uses compression
