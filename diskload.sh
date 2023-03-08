@@ -29,5 +29,8 @@ for i in `seq 1000000`; do
     dd if=rnd-1g-$j of=rnd-1g-$j-2 bs=1M &
   done
   wait
-  sync
+  # Sync output files to disk
+  for j in `seq $PARALLEL_DD`; do
+    sync rnd-1g-$j-2
+  done
 done
