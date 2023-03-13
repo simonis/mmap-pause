@@ -21,6 +21,7 @@ Viability of a [POC fix](#running-the-tests) which writes the performance counte
 | 3.x (3.2)  | [no](#al-2012-jdk-8)  | [yes](#al-2012-jdk-11) | [yes](#al-2012-jdk-17) | [yes](#al-2012-jdk-head-20) |
 | 4.x (4.14) | [no](#al-2018-jdk-8)  | [???](#al-2018-jdk-11) | [yes](#al-2018-jdk-17) | [???](#al-2018-jdk-head-20) |
 | 5.x (5.10) | [yes](#al-2023-jdk-8) | yes                    | [yes](#al-2023-jdk-17) | [yes](#al-2023-jdk-head-20) |
+
 (???) means inconsistent results
 
 The only solution which reliably eliminates latency issues for all JDKs an all tested kernel versions is [mounting the hsperf data directory to memory](#amazon-linux-2012-kernel-32-hdd-with-tmphsperfdata_user-in-tmpfs) (i.e. "tmpfs").
