@@ -2,8 +2,30 @@
 
 *-This repo based on [Evan Jones](https://www.evanjones.ca/) original [mmap-pause](https://github.com/evanj/mmap-pause) project. See [README_orig.md](README_orig.md) for the original README file.-*
 
-The goal of this project is to investigate the overhead and latency introduced by the [HotSpot Jvmstat Performance Counters](https://openjdk.org/groups/hotspot/docs/Serviceability.html#bjvmstat) feature which by default writes metrics (i.e. so called "*performance counters*") periodically to a memory mapped file.
+The goal of this project is to investigate the overhead and latency introduced by the [HotSpot Jvmstat Performance Counters](https://openjdk.org/groups/hotspot/docs/Serviceability.html#bjvmstat) feature which by default writes metrics (i.e. so called "*performance counters*") periodically to a file that is mapped to shared memory.
 
+## Executive summary
+
+Vulnerability to latency issues due to usage of Jvmstat performance counters depends on the kernel version:
+
+| kernel     | JDK 8                 | JDK 11                 | JDK 17                 | JDK HEAD (20)               |
+| :--------- | :-------------------: | :--------------------: | :--------------------: | :-------------------------: |
+| 3.x (3.2)  | [yes](#al-2012-jdk-8) | [yes](#al-2012-jdk-11) | [yes](#al-2012-jdk-17) | [yes](#al-2012-jdk-head-20) |
+| 4.x (4.14) | [yes](#al-2018-jdk-8) | [yes](#al-2018-jdk-11) | [yes](#al-2018-jdk-17) | [yes](#al-2018-jdk-head-20) |
+| 5.x (5.10) | [no](#al-2023-jdk-8)  | no                     | [no](#al-2023-jdk-17)  | [no](#al-2023-jdk-head-20)  |
+
+Viability of a [POC fix](#running-the-tests) which writes the performance counters asynchronously to shared memory is JDK and kernel dependent:
+
+| kernel     | JDK 8                 | JDK 11                 | JDK 17                 | JDK HEAD (20)               |
+| :--------- | :-------------------: | :--------------------: | :--------------------: | :-------------------------: |
+| 3.x (3.2)  | [no](#al-2012-jdk-8)  | [yes](#al-2012-jdk-11) | [yes](#al-2012-jdk-17) | [yes](#al-2012-jdk-head-20) |
+| 4.x (4.14) | [no](#al-2018-jdk-8)  | [???](#al-2018-jdk-11) | [yes](#al-2018-jdk-17) | [???](#al-2018-jdk-head-20) |
+| 5.x (5.10) | [yes](#al-2023-jdk-8) | yes                    | [yes](#al-2023-jdk-17) | [yes](#al-2023-jdk-head-20) |
+(???) means inconsistent results
+
+The only solution which reliably eliminates latency issues for all JDKs an all tested kernel versions is [mounting the hsperf data directory to memory](#amazon-linux-2012-kernel-32-hdd-with-tmphsperfdata_user-in-tmpfs) (i.e. "tmpfs").
+
+For the full details read on..
 ## Jvmstat Performance Counters
 
 By default the HotSpot JVM exports a set of performance counters for monitoring various internal subsystems of the JVM. The intention is that updating these counters incurs in zero overhead such that they can be always on. The [jstat](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/jstat.html) tool can be used to monitor some of these counters. The full set of counters can be queried with `jcmd <pid> PerfCounter.print` or accessed programmatically (see [Accessing Jvmstat counters programmatically](#accessing-jvmstat-counters-programmatically)).
@@ -112,7 +134,7 @@ Swap:        0k total,        0k used,        0k free,  7055964k cached
 
 #### Amazon Linux 2012 / kernel 3.2 / HDD
 
-##### JDK 8
+##### AL 2012 / JDK 8
 
 We'll start with JDK 8 on Amazon Linux 2012. The first two graphs show the results of the two VM running with `-XX:-UsePerfData` and `-XX:+PerfDisableSharedMem`.
 
@@ -130,7 +152,7 @@ The next two graphs are from the JVMs which ran at the same time but with defaul
 
 With the default settings we can clearly see that the maximum latency increases up to more than 4000ms. Unfortunately, writing the Jvmstat memory region asynchronously to the memory mapped file, doesn't really help a lot. While it decreases the peak pause times to ~2500ms, the P99.9% (1200ms) is still way above the P99.9% (3.7ms) without the memory mapped file. The reason why asynchronously writing the hsperf data doesn't really help is currently unclear to me and requires more investigation.
 
-##### JDK 11
+##### AL 2012 / JDK 11
 
 Next we'll present the results of running the same experiment with JDK 11 (with `-XX:+UseParallelGC`) instead of JDK 8.
 
@@ -145,7 +167,7 @@ Thr first two graphs for `-XX:-UsePerfData` and `-XX:+PerfDisableSharedMem` show
 | ![](results_al2012_c4/java11x4-async-on_c4_1.png) |
 
 For the default configuration, JDK 11 is better at P99.9% (i.e. ~7ms vs. ~290ms) but still similar at P99.99% and P100%. The real surprise comes with the new and experimental `-XX:+PerfAsyncSharedMem` option which delivers similar results on JDK 11 like `-XX:-UsePerfData` and `-XX:+PerfDisableSharedMem`
-##### JDK 17
+##### AL 2012 / JDK 17
 
 Finally the results of same experiment with JDK 17 (with `-XX:+UseParallelGC`).
 
@@ -162,6 +184,17 @@ The latency with enabled shared memory (i.e. with the default `-XX:-PerfDisableS
 | ![](results_al2012_c4/java17x4-async-on_c4_1.png) |
 
 But with JDK 17, writing the hsperf counters asynchronously with the new `-XX:+PerfAsyncSharedMem` option helps as well and brings the latency down to the same level like with `-XX:+PerfDisableSharedMem`.
+
+##### AL 2012 / JDK HEAD (20)
+
+| ![](results_al2012_c4/java20x4-no-perf_c4_2.png) |
+|-------|
+| ![](results_al2012_c4/java20x4-no-mmap_c4_2.png) |
+
+| ![](results_al2012_c4/java20x4-async-off_c4_2.png) |
+|-------|
+| ![](results_al2012_c4/java20x4-async-on_c4_2.png) |
+
 #### Amazon Linux 2012 / kernel 3.2 / HDD (with `/tmp/hsperfdata_<user>` in tmpfs)
 
 So far we've seen that using a memory mapped hsperf data file can indeed lead to significant pauses. In this experiment we will mount the `/tmp/hsperfdata_<user>` directory to RAM by using a `tmpfs` file system:
@@ -183,7 +216,7 @@ The results without memory mapped and disabled hsperf counters are similar to th
 However now both the results for enabling hsperf as well as asynchronous hsperf don't incur in any significant overhead. This clearly confirms that the latencies observed before are mostly caused by disk I/O.
 #### Amazon Linux 2012 / kernel 3.2 / SSD
 
-This is the same experiment like the first one (i.e. [Amazon Linux 2012 / kernel 3.2 / HDD](#amazon_linux_2012_/_kernel_3.2_/_hdd)) but instead of the "standard" HDD we are now using SSD backed "gp2" storage. We again start with the results without or without memory mapped hsperf data which is quite similar to the original numbers:
+This is the same experiment like the first one (i.e. [Amazon Linux 2012 / kernel 3.2 / HDD](#amazon-linux-2012-kernel-32-hdd)) but instead of the "standard" HDD we are now using SSD backed "gp2" storage. We again start with the results without or without memory mapped hsperf data which is quite similar to the original numbers:
 
 | ![](results_al2012_c4_ssd/java8x4-no-perf_c4_1.png) |
 |-------|
@@ -198,11 +231,99 @@ However, the results with memory mapped and asynchronously written hsperf counte
 While the pauses are clearly smaller compared to the HDD variants, they are still significantly higher than without hsperf. It is unclear why SSD based storage doesn't perform significantly better than HDD storage. One of the reasons might be that both of them are connected via network (i.e. [EBS]((https://aws.amazon.com/ebs/))) to the instances. We might have to try with [local instance storage](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html) to get clearer results.
 #### Amazon Linux 2018 / kernel 4.14 / HDD
 
-TBD
+##### AL 2018 / JDK 8
 
+| ![](results_al2018_c4/java8x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2018_c4/java8x4-no-mmap_c4_1.png) |
+
+
+
+| ![](results_al2018_c4/java8x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2018_c4/java8x4-async-on_c4_1.png) |
+
+##### AL 2018 / JDK 11
+
+| ![](results_al2018_c4/java11x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2018_c4/java11x4-no-mmap_c4_1.png) |
+
+
+
+| ![](results_al2018_c4/java11x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2018_c4/java11x4-async-on_c4_1.png) |
+
+For some reason, `-XX:+PerfAsyncSharedMemory` doesn't seem to help for JDK 11 on kernel 4.14 (needs more investigation).
+
+##### AL 2018 / JDK 17
+
+| ![](results_al2018_c4/java17x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2018_c4/java17x4-no-mmap_c4_1.png) |
+
+
+
+| ![](results_al2018_c4/java17x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2018_c4/java17x4-async-on_c4_1.png) |
+
+For JDK 17 `-XX:+PerfAsyncSharedMemory` seem to help for on kernel 4.14 (needs more measurements to verify if this is really true).
+
+##### AL 2018 / JDK HEAD (20)
+
+We also get contradicting results for JDK HEAD (i.e. 20) on kernel 4.14. In the first measurement we have no pauses in the default configuration (i.e. with shared memory) but a long pause with `-XX:+PerfAsyncSharedMemory`:
+| ![](results_al2018_c4/java20x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2018_c4/java20x4-async-on_c4_1.png) |
+
+In the second measurement we see the opposite behavior. With the default setting we get quite some pauses whereas the JVM with `-XX:+PerfAsyncSharedMemory` runs without any hiccups:
+
+| ![](results_al2018_c4/java20x4-async-off_c4_2.png) |
+|-------|
+| ![](results_al2018_c4/java20x4-async-on_c4_2.png) |
+
+These results are similar to the ones for JDK 11 on AL 2018. We need more and potentially longer measurements in order to find a definitive answer.
 #### Amazon Linux 2023 / kernel 5.10 / HDD
 
-TBD
+##### AL 2023 / JDK 8
+
+| ![](results_al2023_c4/java8x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2023_c4/java8x4-no-mmap_c4_1.png) |
+
+
+
+| ![](results_al2023_c4/java8x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2023_c4/java8x4-async-on_c4_1.png) |
+
+##### AL 2023 / JDK 17
+
+| ![](results_al2023_c4/java17x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2023_c4/java17x4-no-mmap_c4_1.png) |
+
+
+
+| ![](results_al2023_c4/java17x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2023_c4/java17x4-async-on_c4_1.png) |
+
+##### AL 2023 / JDK HEAD (20)
+
+| ![](results_al2023_c4/java20x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2023_c4/java20x4-no-mmap_c4_1.png) |
+
+
+
+| ![](results_al2023_c4/java20x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2023_c4/java20x4-async-on_c4_1.png) |
+
+
 #### Generating latency histograms from GC logs
 
 TBD
