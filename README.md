@@ -87,7 +87,7 @@ Regarding the test hardware, I use AWS EC2 [c4.4xlarge](https://instances.vantag
 
 ### Running the tests
 
-A c4.4xlarge instance has 16 vCPUs and 30gb of memory. For each experiment I ran 4 JVMs in parallel for four hours with the above option plus one of `-XX:-UsePerfData`, `-XX:+PerfDisableSharedMem`, `-XX:-PerfDisableSharedMem` (the default), and `-XX:+PerfAsyncSharedMem`. The last option (`PerfAsyncSharedMem`) is a quick POC for evaluating the impact of asynchronously writing out the hsperf data counters to shared memory from an independent thread. With `-XX:+PerfAsyncSharedMem` the JVM will allocate both, traditional as well as shared memory for the Jvmstat counters. However, at runtime the counters will always be updated in the anonymous memory (like with `-XX:+PerfDisableSharedMem`) and only be written out periodically to shared memory (currently every `PerfDataSamplingInterval` ms) from an independent thread (see the code for [JDK 8](https://github.com/simonis/jdk8u-dev/tree/PerfAsyncSharedMem), [JDK 17](https://github.com/simonis/jdk17u-dev/tree/PerfAsyncSharedMem) and [JDK tip](https://github.com/simonis/jdk/tree/PerfAsyncSharedMem)).
+A c4.4xlarge instance has 16 vCPUs and 30gb of memory. For each experiment I ran 4 JVMs in parallel for four hours with the above option plus one of `-XX:-UsePerfData`, `-XX:+PerfDisableSharedMem`, `-XX:-PerfDisableSharedMem` (the default), and `-XX:+PerfAsyncSharedMem`. The last option (`PerfAsyncSharedMem`) is a quick POC for evaluating the impact of asynchronously writing out the hsperf data counters to shared memory from an independent thread. With `-XX:+PerfAsyncSharedMem` the JVM will allocate both, traditional as well as shared memory for the Jvmstat counters. However, at runtime the counters will always be updated in the anonymous memory (like with `-XX:+PerfDisableSharedMem`) and only be written out periodically to shared memory (currently every `PerfDataSamplingInterval` ms) from an independent thread (see the code for [JDK 8](https://github.com/simonis/jdk8u-dev/tree/PerfAsyncSharedMem), [JDK 11](https://github.com/simonis/jdk11u-dev/tree/PerfAsyncSharedMem), [JDK 17](https://github.com/simonis/jdk17u-dev/tree/PerfAsyncSharedMem) and [JDK tip](https://github.com/simonis/jdk/tree/PerfAsyncSharedMem)).
 
 In parallel I ran `./diskload.sh` with four parallel processes to generate I/O load on the disks and `LINES=20 top -b -d 10 > /dev/shm/tmp/top.log` for a general overview of the system. The typical `top` output during the runs looks as follows (indicating that there are more than enough CPU and memory resources for the Java processes):
 ```
@@ -112,6 +112,8 @@ Swap:        0k total,        0k used,        0k free,  7055964k cached
 
 #### Amazon Linux 2012 / kernel 3.2 / HDD
 
+##### JDK 8
+
 We'll start with JDK 8 on Amazon Linux 2012. The first two graphs show the results of the two VM running with `-XX:-UsePerfData` and `-XX:+PerfDisableSharedMem`.
 
 | ![](results_al2012_c4/java8x4-no-perf_c4_2.png) |
@@ -126,10 +128,74 @@ The next two graphs are from the JVMs which ran at the same time but with defaul
 |-------|
 | ![](results_al2012_c4/java8x4-async-on_c4_2.png) |
 
-With the default settings we can clearly see that the maximum latency increases up to more than 4000 ms. Unfortunately, writing the Jvmstat memory region asynchronously to the memory mapped file, doesn't really help a lot. While it decreases the peak pause times to ~2500 ms, the P99.9% (1200 ms) is still way above the P99.9% (3.7 ms) without the memory mapped file. The reason why asynchronously writing the hsperf data doesn't really help is currently unclear to me and requires more investigation.
+With the default settings we can clearly see that the maximum latency increases up to more than 4000ms. Unfortunately, writing the Jvmstat memory region asynchronously to the memory mapped file, doesn't really help a lot. While it decreases the peak pause times to ~2500ms, the P99.9% (1200ms) is still way above the P99.9% (3.7ms) without the memory mapped file. The reason why asynchronously writing the hsperf data doesn't really help is currently unclear to me and requires more investigation.
 
-Next we'll present the results of running the same experiment with JDK 17 (with `-XX:+UseParallelGC`) instead of JDK 8.
+##### JDK 11
 
+Next we'll present the results of running the same experiment with JDK 11 (with `-XX:+UseParallelGC`) instead of JDK 8.
+
+| ![](results_al2012_c4/java11x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2012_c4/java11x4-no-mmap_c4_1.png) |
+
+Thr first two graphs for `-XX:-UsePerfData` and `-XX:+PerfDisableSharedMem` show similar results like JDK 8.
+
+| ![](results_al2012_c4/java11x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2012_c4/java11x4-async-on_c4_1.png) |
+
+For the default configuration, JDK 11 is better at P99.9% (i.e. ~7ms vs. ~290ms) but still similar at P99.99% and P100%. The real surprise comes with the new and experimental `-XX:+PerfAsyncSharedMem` option which delivers similar results on JDK 11 like `-XX:-UsePerfData` and `-XX:+PerfDisableSharedMem`
+##### JDK 17
+
+Finally the results of same experiment with JDK 17 (with `-XX:+UseParallelGC`).
+
+| ![](results_al2012_c4/java17x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2012_c4/java17x4-no-mmap_c4_1.png) |
+
+As you can see, there have been some nice latency-related improvements between JDK 8 and 17 which leads to P99.99% going down from ~7ms to under 1ms if either shared memory for hsperf is disabled (i.e. `-XX:+PerfDisableSharedMem`) or performance counters are disabled completely (i.e. `-XX:-UsePerfData`).
+
+The latency with enabled shared memory (i.e. with the default `-XX:-PerfDisableSharedMem`) improved as well, although it still shows considerable pauses up to +1700ms:
+
+| ![](results_al2012_c4/java17x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2012_c4/java17x4-async-on_c4_1.png) |
+
+But with JDK 17, writing the hsperf counters asynchronously with the new `-XX:+PerfAsyncSharedMem` option helps as well and brings the latency down to the same level like with `-XX:+PerfDisableSharedMem`.
+#### Amazon Linux 2012 / kernel 3.2 / HDD (with `/tmp/hsperfdata_<user>` in tmpfs)
+
+So far we've seen that using a memory mapped hsperf data file can indeed lead to significant pauses. In this experiment we will mount the `/tmp/hsperfdata_<user>` directory to RAM by using a `tmpfs` file system:
+```
+$ sudo mount -t tmpfs -o size=1M,uid=`id -u`,gid=`id -g`,mode=755 tmpfs /tmp/hsperfdata_ec2-user
+```
+Notice that we can't simply create a symlink from `/tmp/hsperfdata_<user>` to e.g. `/dev/shm` because the JVM will refuse to use `/tmp/hsperfdata_<user>` if it is a symlink for security reasons. We also can't change the location the location of the hsperf data directory by setting the [`TMPDIR`](https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html) environment variable or the Java [`java.io.tmpdir`](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/System.html#getProperties()) system property (see [JDK-6938627](https://bugs.openjdk.org/browse/JDK-6938627) and [JDK-7009828](https://bugs.openjdk.org/browse/JDK-7009828)) for why).
+
+| ![](results_al2012_c4/java8x4-no-perf_c4_tmpfs_1.png) |
+|-------|
+| ![](results_al2012_c4/java8x4-no-mmap_c4_tmpfs_1.png) |
+
+The results without memory mapped and disabled hsperf counters are similar to the previous results.
+
+| ![](results_al2012_c4/java8x4-async-off_c4_tmpfs_1.png) |
+|-------|
+| ![](results_al2012_c4/java8x4-async-on_c4_tmpfs_1.png) |
+
+However now both the results for enabling hsperf as well as asynchronous hsperf don't incur in any significant overhead. This clearly confirms that the latencies observed before are mostly caused by disk I/O.
+#### Amazon Linux 2012 / kernel 3.2 / SSD
+
+This is the same experiment like the first one (i.e. [Amazon Linux 2012 / kernel 3.2 / HDD](#amazon_linux_2012_/_kernel_3.2_/_hdd)) but instead of the "standard" HDD we are now using SSD backed "gp2" storage. We again start with the results without or without memory mapped hsperf data which is quite similar to the original numbers:
+
+| ![](results_al2012_c4_ssd/java8x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2012_c4_ssd/java8x4-no-mmap_c4_1.png) |
+
+However, the results with memory mapped and asynchronously written hsperf counters are a little disappointing:
+
+| ![](results_al2012_c4_ssd/java8x4-async-off_c4_1.png) |
+|-------|
+| ![](results_al2012_c4_ssd/java8x4-async-on_c4_1.png) |
+
+While the pauses are clearly smaller compared to the HDD variants, they are still significantly higher than without hsperf. It is unclear why SSD based storage doesn't perform significantly better than HDD storage. One of the reasons might be that both of them are connected via network (i.e. [EBS]((https://aws.amazon.com/ebs/))) to the instances. We might have to try with [local instance storage](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html) to get clearer results.
 #### Amazon Linux 2018 / kernel 4.14 / HDD
 
 TBD
@@ -140,11 +206,19 @@ TBD
 #### Generating latency histograms from GC logs
 
 TBD
-## Outlook
+### Discussion and Conclusion
+
+- Usage of `-XX:-PerfDisableSharedMem` still introduces significant pauses even with JDK 17 on AL 2012.
+- We can confirm that the pauses are related to disk I/O, because they disappear if we mount the hsperf data directory to a memory file system like tmpfs.
+- Using SSD storage doesn't improve the situation much over HDD (but have to confirm this by using instance local storage instead of EBS).
+- The average pause times have decreased from JDK 8 to 17.
+- We need to investigate why writing the hsperf counters asynchronously (i.e. `-XX:+PerfAsyncSharedMem`) doesn't help for JDK 8 but at the same time almost entirely eliminates hsperf related pauses on JDK 11 and 17?
+### Future work
 
 There are still a lot of dimensions to this problem worth exploring:
 - Test with different GCs
 - Test on various file systems
-- Test with different storage systems
+- Test with different storage systems (i.e. instance storage vs. EBS, GP2/GP3, etc..)
 - Test with hsperf data file in tempfs
 - Test with different mount options (e.g. [noatime/relatime/lazytime](https://en.m.wikipedia.org/wiki/Stat_%28system_call%29#NOATIME), aso see "[Introducing lazytime](https://lwn.net/Articles/621046/)")
+- Try to compact all frequently updated counters into s single page/block
