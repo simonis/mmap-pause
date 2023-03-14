@@ -37,13 +37,34 @@ The Jvmstat performance counters feature is controlled by the `-XX:+/-UsePerfDat
 
 #### Implementation details
 
-As so often, the best (and only) documentation of the performance counters implementation details is in the [source code](https://github.com/openjdk/jdk8u-dev/blob/master/hotspot/src/share/vm/runtime/perfData.hpp#L69-L242) :). In summary, if `UsePerfData` is on, the JVM will reserve a chunk of `PerfDataMemorySize` (defaults to 32) kilobytes of memory for storing performance counters:
+As so often, the best (and only) documentation of the performance counters implementation details is in the [source code](https://github.com/openjdk/jdk8u-dev/blob/master/hotspot/src/share/vm/runtime/perfData.hpp#L69-L242) :). In summary, if `UsePerfData` is on, the JVM will reserve a chunk of `PerfDataMemorySize` (defaults to 32) kilobytes of memory for storing performance counters. The creation of the counters can be logged with `-Xlog:perf*=debug`:
 
+```bash
+$ java -XX:+UseParallelGC -Xlog:perf*=debug -version
+[0.002s][debug][perf,memops] PerfDataMemorySize = 32768, os::vm_allocation_granularity = 4096, adjusted size = 32768
+[0.003s][info ][perf,memops] Trying to open /tmp/hsperfdata_simonis/31607
+[0.003s][info ][perf,memops] Successfully opened
+[0.003s][debug][perf,memops] PerfMemory created: address = 0x00007ffff7fea000, size = 32768
+[0.004s][debug][perf,datacreation] name = sun.rt._sync_Inflations, ..., address = 0x00007ffff7fea020, data address = 0x00007ffff7fea050
+...
+[0,770s][debug][perf,datacreation] Total = 214, Sampled = 5, Constants = 49
 ```
+Notice how the number of counters is different for various JVM configurations and e.g. depends on the GC:
+
+```bash
+$ java -XX:+UseShenandoahGC -Xlog:perf*=trace -version
+...
+[0,798s][debug][perf,datacreation] Total = 143, Sampled = 1, Constants = 36
+```
+The `jcmd` tool can be used to query the values of the various counters;
+
+```bash
 $ jcmd <pid> PerfCounter.print | -E 'sun.perfdata.(used|size)
 sun.perfdata.size=32768
 sun.perfdata.used=17984
 ```
+
+`sun.perfdata.size` corresponds to `PerfDataMemorySize` (defaults to 32) and `sun.perfdata.used` is the memory actually used by the counters and depends on the number and  type of them.
 
 If `PerfDisableSharedMem` is false, this will be shared memory backed by a file (i.e. `/tmp/hsperfdata_<username>/<pid>`). Otherwise, it will be ordinary, anonymous memory and the only way to access it will be with the help of the `-XX:+PerfDataSaveToFile` option after JVM shutdown. In that case, the counters will be written to `hsperfdata_<pid>` by default, but that can be configured with `-XX:PerfDataSaveFile`.
 
