@@ -346,9 +346,47 @@ These results are similar to the ones for JDK 11 on AL 2018. We need more and po
 | ![](results_al2023_c4/java20x4-async-on_c4_1.png) |
 
 
-#### Generating latency histograms from GC logs
+#### Generating latency histograms from GC/Safepoint logs logs
 
-TBD
+Instead of using the jHiccup library to measure latencies we could have just as well relied on the safpoint times logged by the JVM. For JDK 8 we ran with `-XX:+PrintGCApplicationStoppedTime` which in [contrast to its name](https://stackoverflow.com/a/29673564) logs not only  the time the JVM was stopped during a GC but in fact the time it was stopped during a safepoint. The log output looks as follows for each safepoint:
+```
+2023-03-08T15:10:02.498+0000: Total time for which application threads were stopped: 0,0024133 seconds, Stopping threads took: 0,0002107 seconds
+```
+
+As described in the [jHiccup README](https://github.com/giltene/jHiccup#using-jhiccup-to-process-latency-log-files), the utility can also be used to generate histograms from GC log files. The [jdk8log2hlog.sh](./jdk8log2hlog.sh) script basically extracts the "*time for which application threads were stopped*" from the log file and feeds it to jHiccup which generates a histogram from the data.
+
+If we take the log file [java8x4_jh-async-on_c4_2.txt.gz](./results_al2012_c4/java8x4_jh-async-on_c4_2.txt.gz) which corresponds to the "*`-XX:+PerfAsyncSharedMem` plot for JDK 8 on AL2012*" from above and process it with our script:
+
+```bash
+$ ./jdk8log2hlog.sh results_al2012_c4/java8x4_jh-async-on_c4_2.txt.gz
+$ ls -l results_al2012_c4/java8x4_jh-async-on_c4_2.hlog
+-rw-r--r-- 1 simonisv domain^users 713855 Mär 15 20:01 results_al2012_c4/java8x4_jh-async-on_c4_2.hlog
+```
+
+this will create a histogram which is very similar to the original jHiccup chart of that run:
+
+| ![](results_al2012_c4/java8x4-async-on_c4_2.png) |
+|-------|
+| ![](results_al2012_c4/java8x4_jh-async-on_c4_2.hlog.png) |
+
+For JDK 17 we use `-Xlog:safepoint` instead of `-XX:+PrintGCApplicationStoppedTime` which has a slightly different output format:
+```
+[0,246s][info][safepoint] Safepoint "ParallelGCFailedAllocation", Time since last: 228071482 ns, Reaching safepoint: 104050 ns, At safepoint: 4960664 ns, Total: 5064714 ns
+```
+
+We can now use the [`jdk17log2hlog.sh`](./jdk17log2hlog.sh) script to extract the "*Total:*" safepoint times and feed them to jHiccup to create a safepoint histogram. For the "*`-XX:-UsePerfData` graph for JDK 17 on AL 2012*" shown before which corresponds to the [java17x4_jh-no-perf_c4_1.txt.gz](results_al2012_c4/java17x4_jh-no-perf_c4_1.txt.gz) log file we create the histogram as follows:
+```bash
+$ ./jdk17log2hlog.sh results_al2012_c4/java17x4_jh-no-perf_c4_1.txt.gz
+$ ls -l results_al2012_c4/java17x4_jh-no-perf_c4_1.hlog
+-rw-r--r-- 1 simonisv domain^users 419827 Mär 15 21:46 results_al2012_c4/java17x4_jh-no-perf_c4_1.hlog
+```
+
+| ![](results_al2012_c4/java17x4-no-perf_c4_1.png) |
+|-------|
+| ![](results_al2012_c4/java17x4_jh-no-perf_c4_1.hlog.png) |
+
+Again, the new graph looks quite similar except for a single ~8ms pause (at about 11:00 in the original graph) which doesn't seem to be caused be a safepoint.
+
 ### Discussion and Conclusion
 
 - Usage of `-XX:-PerfDisableSharedMem` still introduces significant pauses even with JDK 17 on AL 2012.
