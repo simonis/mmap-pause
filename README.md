@@ -6,7 +6,7 @@ The goal of this project is to investigate the overhead and latency introduced b
 
 ## Executive summary
 
-Vulnerability to latency issues due to usage of Jvmstat performance counters depends on the kernel version:
+The vulnerability to latency issues due to usage of Jvmstat performance counters depends on the kernel version:
 
 | kernel     | JDK 8                 | JDK 11                 | JDK 17                 | JDK HEAD (20)               |
 | :--------- | :-------------------: | :--------------------: | :--------------------: | :-------------------------: |
@@ -14,7 +14,7 @@ Vulnerability to latency issues due to usage of Jvmstat performance counters dep
 | 4.x (4.14) | [yes](#al-2018--jdk-8) | [yes](#al-2018--jdk-11) | [yes](#al-2018--jdk-17) | [yes](#al-2018--jdk-head-20) |
 | 5.x (5.10) | [no](#al-2023--jdk-8)  | no                     | [no](#al-2023--jdk-17)  | [no](#al-2023--jdk-head-20)  |
 
-Viability of a [POC fix](#running-the-tests) which writes the performance counters asynchronously to shared memory is JDK and kernel dependent:
+The usefulness of a [POC fix](#running-the-tests) which writes the performance counters asynchronously to shared memory is still JDK and kernel dependent:
 
 | kernel     | JDK 8                 | JDK 11                 | JDK 17                 | JDK HEAD (20)               |
 | :--------- | :-------------------: | :--------------------: | :--------------------: | :-------------------------: |
@@ -24,7 +24,10 @@ Viability of a [POC fix](#running-the-tests) which writes the performance counte
 
 (???) means inconsistent results
 
-The only solution which reliably eliminates latency issues for all JDKs an all tested kernel versions is [mounting the hsperf data directory to memory](#amazon-linux-2012--kernel-32--hdd-with-tmphsperfdata_user-in-tmpfs) (i.e. "tmpfs").
+We've identified the following solution which reliably eliminate latency issues for all JDKs an all tested kernel versions:
+ - [Mounting the hsperf data directory to memory](#amazon-linux-2012--kernel-32--hdd-with-tmphsperfdata_user-in-tmpfs) (i.e. "tmpfs").
+ - [Using `process_vm_readv()`](#amazon-linux-2012--kernel-32--hdd-with-process_vm_readv) to directly access the hsperf data of a process (even if it runs with `-XX:+PerfDisableSharedMem`).
+ - [Implement a custom diagnostic command](#amazon-linux-2012--kernel-32--hdd-with-diagnostic-command) to export the hsperf data (even if the JVM runs with `-XX:+PerfDisableSharedMem`).
 
 For the full details read on..
 ## Jvmstat Performance Counters
@@ -236,6 +239,37 @@ The results without memory mapped and disabled hsperf counters are similar to th
 | ![](results_al2012_c4/java8x4-async-on_c4_tmpfs_1.png) |
 
 However now both the results for enabling hsperf as well as asynchronous hsperf don't incur in any significant overhead. This clearly confirms that the latencies observed before are mostly caused by disk I/O.
+
+#### Amazon Linux 2012 / kernel 3.2 / HDD with diagnostic command
+
+For this experiment we've created a [simple diagnostic command](https://github.com/simonis/jdk8u-dev/tree/DCmd_VM.perf_data) (`VM.perf_data`) which returns the raw contents of the hsperf data memory. This way we can run the the JVM without memory mapped hsperf file (i.e. `-XX:+PerfDisableSharedMem`) but still access the counters through the diagnostic command.
+
+In order to avoid interference when querying the data, we haven't used JDK's `jcmd` command, which spins up a brand new JVM on every invocation, but instead a [slightly patched](https://github.com/simonis/jattach) version of Andrei Pangin's native [`jattach`](https://github.com/jattach/jattach) utility.
+
+| ![](results_al2012_c4/java8x4-mmap-jcmd_c4_1.png) |
+|-------|
+| ![](results_al2012_c4/java8x4-no-mmap-jcmd_c4_1.png) |
+
+The control runs with and without memory mapped hsperf counters are similar to the original results.
+
+For the following two graphs we ran with `-XX:+PerfDisableSharedMem` but executed `jattach <pid> -i 1000 jcmd VM.perf_data` and `jattach <pid> -i 60000 jcmd VM.perf_data` in parallel which called the new `VM.perf_data` diagnostic command once a second and once a minute respectively:
+
+| ![](results_al2012_c4/java8x4-no-mmap-60s-jcmd_c4_1.png) |
+|-------|
+| ![](results_al2012_c4/java8x4-no-mmap-1s-jcmd_c4_1.png) |
+
+As you can see, the additional execution of the diagnostic command does not introduce any significant latency.
+
+#### Amazon Linux 2012 / kernel 3.2 / HDD with `process_vm_readv`
+
+Instead of writing a custom diagnostic command to access the JVM's private hsperf data we can just as well find and read this data from a JVM process by leveraging the structures of HotSpot's [Serviceability Agent](https://openjdk.org/groups/hotspot/docs/Serviceability.html#bsa) and the [`process_vm_readv()`](https://man7.org/linux/man-pages/man2/process_vm_readv.2.html) system call. More details about this approach proposed by [Andrei Pangin](https://twitter.com/AndreiPangin) can be found in his [hsperf GitHub project](https://github.com/apangin/hsperf).
+
+| ![](results_al2012_c4/java8x4-no-mmap-60s-proc-vm-read_c4_1.png) |
+|-------|
+| ![](results_al2012_c4/java8x4-no-mmap-1s-proc-vm-read_c4_1.png) |
+
+As can be seen from the graphs, reading the hsperf data once per minute or once per second with `process_vm_readv()` incurs in no addition latency overhead.
+
 #### Amazon Linux 2012 / kernel 3.2 / SSD
 
 This is the same experiment like the first one (i.e. [Amazon Linux 2012 / kernel 3.2 / HDD](#amazon-linux-2012-kernel-32-hdd)) but instead of the "standard" HDD we are now using SSD backed "gp2" storage. We again start with the results without or without memory mapped hsperf data which is quite similar to the original numbers:
