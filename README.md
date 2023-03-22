@@ -268,7 +268,7 @@ Instead of writing a custom diagnostic command to access the JVM's private hsper
 |-------|
 | ![](results_al2012_c4/java8x4-no-mmap-1s-proc-vm-read_c4_1.png) |
 
-As can be seen from the graphs, reading the hsperf data once per minute or once per second with `process_vm_readv()` incurs in no addition latency overhead.
+As can be seen from the graphs, reading the hsperf data once per minute or once per second with `process_vm_readv()` incurs in no addition latency overhead. They were produced by running a [slightly patched version of hsperf](https://github.com/simonis/hsperf) as `hsperf <pid> -i 1000` / `hsperf <pid> -i 60000` in addition to the Java processes.
 
 #### Amazon Linux 2012 / kernel 3.2 / SSD
 
