@@ -10,21 +10,21 @@ Vulnerability to latency issues due to usage of Jvmstat performance counters dep
 
 | kernel     | JDK 8                 | JDK 11                 | JDK 17                 | JDK HEAD (20)               |
 | :--------- | :-------------------: | :--------------------: | :--------------------: | :-------------------------: |
-| 3.x (3.2)  | [yes](#al-2012-jdk-8) | [yes](#al-2012-jdk-11) | [yes](#al-2012-jdk-17) | [yes](#al-2012-jdk-head-20) |
-| 4.x (4.14) | [yes](#al-2018-jdk-8) | [yes](#al-2018-jdk-11) | [yes](#al-2018-jdk-17) | [yes](#al-2018-jdk-head-20) |
-| 5.x (5.10) | [no](#al-2023-jdk-8)  | no                     | [no](#al-2023-jdk-17)  | [no](#al-2023-jdk-head-20)  |
+| 3.x (3.2)  | [yes](#al-2012--jdk-8) | [yes](#al-2012--jdk-11) | [yes](#al-2012--jdk-17) | [yes](#al-2012--jdk-head-20) |
+| 4.x (4.14) | [yes](#al-2018--jdk-8) | [yes](#al-2018--jdk-11) | [yes](#al-2018--jdk-17) | [yes](#al-2018--jdk-head-20) |
+| 5.x (5.10) | [no](#al-2023--jdk-8)  | no                     | [no](#al-2023--jdk-17)  | [no](#al-2023--jdk-head-20)  |
 
 Viability of a [POC fix](#running-the-tests) which writes the performance counters asynchronously to shared memory is JDK and kernel dependent:
 
 | kernel     | JDK 8                 | JDK 11                 | JDK 17                 | JDK HEAD (20)               |
 | :--------- | :-------------------: | :--------------------: | :--------------------: | :-------------------------: |
-| 3.x (3.2)  | [no](#al-2012-jdk-8)  | [yes](#al-2012-jdk-11) | [yes](#al-2012-jdk-17) | [yes](#al-2012-jdk-head-20) |
-| 4.x (4.14) | [no](#al-2018-jdk-8)  | [???](#al-2018-jdk-11) | [yes](#al-2018-jdk-17) | [???](#al-2018-jdk-head-20) |
-| 5.x (5.10) | [yes](#al-2023-jdk-8) | yes                    | [yes](#al-2023-jdk-17) | [yes](#al-2023-jdk-head-20) |
+| 3.x (3.2)  | [no](#al-2012--jdk-8)  | [yes](#al-2012--jdk-11) | [yes](#al-2012--jdk-17) | [yes](#al-2012--jdk-head-20) |
+| 4.x (4.14) | [no](#al-2018--jdk-8)  | [???](#al-2018--jdk-11) | [yes](#al-2018--jdk-17) | [???](#al-2018--jdk-head-20) |
+| 5.x (5.10) | [yes](#al-2023--jdk-8) | yes                    | [yes](#al-2023--jdk-17) | [yes](#al-2023--jdk-head-20) |
 
 (???) means inconsistent results
 
-The only solution which reliably eliminates latency issues for all JDKs an all tested kernel versions is [mounting the hsperf data directory to memory](#amazon-linux-2012-kernel-32-hdd-with-tmphsperfdata_user-in-tmpfs) (i.e. "tmpfs").
+The only solution which reliably eliminates latency issues for all JDKs an all tested kernel versions is [mounting the hsperf data directory to memory](#amazon-linux-2012--kernel-32--hdd-with-tmphsperfdata_user-in-tmpfs) (i.e. "tmpfs").
 
 For the full details read on..
 ## Jvmstat Performance Counters
