@@ -36,7 +36,7 @@ By default the HotSpot JVM exports a set of performance counters for monitoring 
 
 ### Implementation
 
-The Jvmstat performance counters feature is controlled by the `-XX:+/-UsePerfData` command line flag which is on by default. A second flag, `-XX:+/-PerfDisableSharedMem` controls wether the perf data will be exported via a memory mapped file. The flag is off by default meaning that the perf counters will be made available in a memory mapped file with the name `/tmp/hsperfdata_<username>/<pid>` (see [JDK-6938627](https://bugs.openjdk.org/browse/JDK-6938627) and [JDK-7009828](https://bugs.openjdk.org/browse/JDK-7009828)) for why this location can't be changed). This file is also used by other tools like [`jps`](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/jps.html), [`jcmd`](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/jcmd.html) or [jconsole](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/jconsole.html) to discover running JVMS so disabling the shared memory hsperf file will more or less affect the functionality of these tools as well.
+The Jvmstat performance counters feature is controlled by the `-XX:+/-UsePerfData` command line flag which is on by default. A second flag, `-XX:+/-PerfDisableSharedMem` controls wether the perf data will be exported via a memory mapped file. The flag is off by default meaning that the perf counters will be made available in a memory mapped file with the name `/tmp/hsperfdata_<username>/<pid>` (see [JDK-6938627](https://bugs.openjdk.org/browse/JDK-6938627) and [JDK-7009828](https://bugs.openjdk.org/browse/JDK-7009828) for why this location can't be changed). This file is also used by other tools like [`jps`](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/jps.html), [`jcmd`](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/jcmd.html) or [jconsole](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/jconsole.html) to discover running JVMS so disabling the shared memory hsperf file will more or less affect the functionality of these tools as well.
 
 #### Implementation details
 
@@ -226,7 +226,7 @@ So far we've seen that using a memory mapped hsperf data file can indeed lead to
 ```
 $ sudo mount -t tmpfs -o size=1M,uid=`id -u`,gid=`id -g`,mode=755 tmpfs /tmp/hsperfdata_ec2-user
 ```
-Notice that we can't simply create a symlink from `/tmp/hsperfdata_<user>` to e.g. `/dev/shm` because the JVM will refuse to use `/tmp/hsperfdata_<user>` if it is a symlink for security reasons. We also can't change the location the location of the hsperf data directory by setting the [`TMPDIR`](https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html) environment variable or the Java [`java.io.tmpdir`](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/System.html#getProperties()) system property (see [JDK-6938627](https://bugs.openjdk.org/browse/JDK-6938627) and [JDK-7009828](https://bugs.openjdk.org/browse/JDK-7009828)) for why).
+Notice that we can't simply create a symlink from `/tmp/hsperfdata_<user>` to e.g. `/dev/shm` because the JVM will refuse to use `/tmp/hsperfdata_<user>` if it is a symlink for security reasons. We also can't change the location the location of the hsperf data directory by setting the [`TMPDIR`](https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html) environment variable or the Java [`java.io.tmpdir`](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/System.html#getProperties()) system property (see [JDK-6938627](https://bugs.openjdk.org/browse/JDK-6938627) and [JDK-7009828](https://bugs.openjdk.org/browse/JDK-7009828) for why).
 
 | ![](results_al2012_c4/java8x4-no-perf_c4_tmpfs_1.png) |
 |-------|
@@ -272,7 +272,7 @@ As can be seen from the graphs, reading the hsperf data once per minute or once 
 
 #### Amazon Linux 2012 / kernel 3.2 / SSD
 
-This is the same experiment like the first one (i.e. [Amazon Linux 2012 / kernel 3.2 / HDD](#amazon-linux-2012-kernel-32-hdd)) but instead of the "standard" HDD we are now using SSD backed "gp2" storage. We again start with the results without or without memory mapped hsperf data which is quite similar to the original numbers:
+This is the same experiment like the first one (i.e. [Amazon Linux 2012 / kernel 3.2 / HDD](#amazon-linux-2012--kernel-32--hdd)) but instead of the "standard" HDD we are now using SSD backed "gp2" storage. We again start with the results without or without memory mapped hsperf data which is quite similar to the original numbers:
 
 | ![](results_al2012_c4_ssd/java8x4-no-perf_c4_1.png) |
 |-------|
